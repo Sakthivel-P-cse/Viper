@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package viper.api.v1;
+
+import "viper/api/v1/common.proto";
+import "buf/validate/validate.proto";
+
+option go_package = "viper/api/gen/v1;apiv1";
+
+// HealthScope distinguishes process liveness from serving readiness.
+enum HealthScope {
+  HEALTH_SCOPE_UNSPECIFIED = 0;
+  HEALTH_SCOPE_LIVENESS = 1;
+  HEALTH_SCOPE_READINESS = 2;
+}
+
+// HealthState is a stable operational state, not a consensus guarantee.
+enum HealthState {
+  HEALTH_STATE_UNSPECIFIED = 0;
+  HEALTH_STATE_SERVING = 1;
+  HEALTH_STATE_DEGRADED = 2;
+  HEALTH_STATE_NOT_SERVING = 3;
+}
+
+// NodeStatusService exposes redacted operational state and requires admin
+// authorization outside the liveness endpoint.
+service NodeStatusService {
+  rpc GetNodeStatus(GetNodeStatusRequest) returns (GetNodeStatusResponse);
+}
+
+message GetNodeStatusRequest {
+  HealthScope scope = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message GetNodeStatusResponse {
+  string node_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9._:-]+$"
+  }];
+  HealthState health = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  NodeRole role = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  uint64 term = 4;
+  uint64 commit_index = 5;
+  uint64 applied_index = 6;
+  string reason = 7 [(buf.validate.field).string.max_bytes = 256];
+}

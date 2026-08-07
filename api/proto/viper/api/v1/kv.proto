@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package viper.api.v1;
+
+import "viper/api/v1/common.proto";
+import "buf/validate/validate.proto";
+
+option go_package = "viper/api/gen/v1;apiv1";
+
+// KVService provides revisioned key-value operations.
+service KVService {
+  rpc Put(PutRequest) returns (PutResponse);
+  rpc Get(GetRequest) returns (GetResponse);
+  rpc CompareAndSwap(CompareAndSwapRequest) returns (CompareAndSwapResponse);
+}
+
+// PutRequest replaces the value associated with key.
+message PutRequest {
+  string client_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9._:-]+$"
+  }];
+  string request_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9._:-]+$"
+  }];
+  bytes key = 3 [(buf.validate.field).bytes = {
+    min_len: 1
+    max_len: 4096
+  }];
+  bytes value = 4 [(buf.validate.field).bytes.max_len = 1048576];
+}
+
+message PutResponse {
+  uint64 revision = 1;
+}
+
+// GetRequest reads a key using an explicit consistency guarantee.
+message GetRequest {
+  bytes key = 1 [(buf.validate.field).bytes = {
+    min_len: 1
+    max_len: 4096
+  }];
+  ConsistencyMode consistency = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message GetResponse {
+  bytes value = 1 [(buf.validate.field).bytes.max_len = 1048576];
+  bool found = 2;
+  uint64 revision = 3;
+}
+
+// CompareAndSwapRequest atomically replaces a value when its current state
+// matches expected_present and expected_value.
+message CompareAndSwapRequest {
+  string client_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9._:-]+$"
+  }];
+  string request_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9._:-]+$"
+  }];
+  bytes key = 3 [(buf.validate.field).bytes = {
+    min_len: 1
+    max_len: 4096
+  }];
+  bytes expected_value = 4 [(buf.validate.field).bytes.max_len = 1048576];
+  bool expected_present = 5;
+  bytes new_value = 6 [(buf.validate.field).bytes.max_len = 1048576];
+}
+
+message CompareAndSwapResponse {
+  bool swapped = 1;
+  bytes previous_value = 2 [(buf.validate.field).bytes.max_len = 1048576];
+  bool previous_present = 3;
+  uint64 revision = 4;
+}

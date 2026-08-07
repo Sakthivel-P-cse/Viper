@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package viper.api.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "viper/api/gen/v1;apiv1";
+
+// ConsistencyMode identifies the read guarantee requested by a client.
+enum ConsistencyMode {
+  CONSISTENCY_MODE_UNSPECIFIED = 0;
+  CONSISTENCY_MODE_LINEARIZABLE = 1;
+  CONSISTENCY_MODE_STALE = 2;
+}
+
+// NodeRole is the externally observable Raft role of a node.
+enum NodeRole {
+  NODE_ROLE_UNSPECIFIED = 0;
+  NODE_ROLE_FOLLOWER = 1;
+  NODE_ROLE_CANDIDATE = 2;
+  NODE_ROLE_LEADER = 3;
+}
+
+// ErrorCode is a stable machine-readable service error classification.
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_INVALID_ARGUMENT = 1;
+  ERROR_CODE_NOT_LEADER = 2;
+  ERROR_CODE_UNAVAILABLE = 3;
+  ERROR_CODE_DEADLINE_EXCEEDED = 4;
+  ERROR_CODE_PERMISSION_DENIED = 5;
+  ERROR_CODE_DATA_CORRUPTION = 6;
+  ERROR_CODE_CONFLICT = 7;
+  ERROR_CODE_RESOURCE_EXHAUSTED = 8;
+  ERROR_CODE_INTERNAL = 9;
+}
+
+// OperationOutcome describes whether a timed-out or failed mutation is known
+// to have committed. UNKNOWN requires resolution with the same request ID.
+enum OperationOutcome {
+  OPERATION_OUTCOME_UNSPECIFIED = 0;
+  OPERATION_OUTCOME_UNKNOWN = 1;
+  OPERATION_OUTCOME_COMMITTED = 2;
+  OPERATION_OUTCOME_REJECTED = 3;
+}
+
+// ErrorDetail is attached to a gRPC status and contains no sensitive values.
+message ErrorDetail {
+  ErrorCode code = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  bool retryable = 2;
+  OperationOutcome outcome = 3 [(buf.validate.field).enum.defined_only = true];
+  string leader_hint = 4 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^$|^[A-Za-z0-9._:-]+$"
+  }];
+}

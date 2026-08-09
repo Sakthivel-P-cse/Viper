@@ -5,10 +5,12 @@ Raft consensus. The production baseline targets linearizable writes and reads,
 durable recovery, authenticated transport, bounded resource use, and explicit
 operational behavior.
 
-The implementation is being delivered phase by phase. Phase 1 established the
-versioned contracts, package boundaries, build checks, and test harness. Phase
-2 adds checksummed WAL persistence, fail-closed recovery, atomic snapshots, and
-checkpoint compaction. See the [industry-grade design](docs/industry-grade/design.md),
+The implementation is being delivered phase by phase. The baseline established
+versioned contracts, package boundaries, build checks, and test infrastructure.
+The storage baseline adds checksummed WAL persistence, fail-closed recovery,
+atomic snapshots, and checkpoint compaction. Transport, state-machine, and
+client-adapter foundations are now present, while the Raft core and its
+integration remain the next correctness gate. See the [industry-grade design](docs/industry-grade/design.md),
 the [storage durability contract](docs/industry-grade/storage.md), and
 `documentation.md` for the original project documentation.
 

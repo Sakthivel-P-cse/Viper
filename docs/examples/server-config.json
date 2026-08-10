@@ -1,0 +1,29 @@
+{
+  "node_id": "node-1",
+  "data_dir": "/var/lib/viper/node-1",
+  "peer_listen": "127.0.0.1:7301",
+  "client_listen": "127.0.0.1:7401",
+  "peers": [
+    {"id": "node-1", "address": "127.0.0.1:7301", "server_name": "node-1"},
+    {"id": "node-2", "address": "127.0.0.1:7302", "server_name": "node-2"},
+    {"id": "node-3", "address": "127.0.0.1:7303", "server_name": "node-3"}
+  ],
+  "peer_tls": {
+    "certificate": "/etc/viper/tls/node-1.crt",
+    "key": "/etc/viper/tls/node-1.key",
+    "ca": "/etc/viper/tls/cluster-ca.crt"
+  },
+  "client_tls": {
+    "certificate": "/etc/viper/tls/client-server.crt",
+    "key": "/etc/viper/tls/client-server.key",
+    "ca": "/etc/viper/tls/client-ca.crt"
+  },
+  "allowed_clients": ["client-1"],
+  "allowed_administrators": ["admin-1"],
+  "tick_interval_millis": 50,
+  "max_concurrent_requests": 256,
+  "max_requests_per_second": 1000,
+  "max_in_flight_peer_requests": 64,
+  "metrics_listen": "127.0.0.1:7501",
+  "shutdown_timeout_millis": 5000
+}

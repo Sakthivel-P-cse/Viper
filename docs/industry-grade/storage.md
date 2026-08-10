@@ -50,9 +50,15 @@ log history before covered entries are discarded.
   makes durable creation and parent-directory synchronization an explicit
   deployment responsibility; the storage module never acknowledges data under
   a newly created, unanchored directory entry.
-- One process owns a store directory; cross-process file locking is outside the
-  Phase 2 scope and must be enforced by deployment orchestration.
+- One process owns a store directory. `storage.Open` takes a non-blocking
+  advisory lock on `.viper.lock` and refuses a second owner; deployments must
+  still use one process per data directory and preserve the lock file.
 - The filesystem must provide conventional `fsync` and same-directory atomic
   rename semantics.
 - Snapshot payload generation and installation belong to the state-machine and
   Raft integration phases; this module persists and verifies opaque payloads.
+
+Backup export is a separately versioned, checksummed operator artifact. Backup
+verification does not mutate a store, and restore refuses a directory that
+already contains a Viper WAL or snapshot so the last-known-good directory is
+preserved.

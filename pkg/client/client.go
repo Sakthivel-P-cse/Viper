@@ -6,12 +6,14 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	apiv1 "viper/api/gen/v1"
 	"viper/pkg/contracts"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -42,6 +44,45 @@ type CompareAndSwapResult struct {
 // Client is a typed adapter around the generated KV service client.
 type Client struct {
 	service apiv1.KVServiceClient
+}
+
+// DialConfig contains the mandatory TLS and bounded-message settings for a
+// client connection.
+type DialConfig struct {
+	Credentials credentials.TransportCredentials
+	Options     []grpc.DialOption
+}
+
+// Dial creates a typed client with the public RPC size limits applied. The
+// returned connection is owned by the caller and must be closed.
+func Dial(ctx context.Context, target string, config DialConfig) (*Client, *grpc.ClientConn, error) {
+	if ctx == nil {
+		return nil, nil, ErrInvalidClient
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	if target == "" || config.Credentials == nil || config.Credentials.Info().SecurityProtocol != "tls" {
+		return nil, nil, fmt.Errorf("%w: TLS credentials and a target are required", ErrInvalidClient)
+	}
+	options := append([]grpc.DialOption(nil), config.Options...)
+	options = append(options,
+		grpc.WithTransportCredentials(config.Credentials),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(contracts.MaxRPCMessageBytes),
+			grpc.MaxCallSendMsgSize(contracts.MaxRPCMessageBytes),
+		),
+	)
+	connection, err := grpc.NewClient(target, options...)
+	if err != nil {
+		return nil, nil, ErrInvalidClient
+	}
+	client, err := New(connection)
+	if err != nil {
+		_ = connection.Close()
+		return nil, nil, err
+	}
+	return client, connection, nil
 }
 
 // New constructs a client from a gRPC connection. The caller owns the

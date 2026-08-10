@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -116,5 +118,18 @@ func TestClientRejectsNilConstruction(t *testing.T) {
 	}
 	if _, err := NewWithService(nil); !errors.Is(err, ErrInvalidClient) {
 		t.Fatalf("NewWithService(nil) error = %v, want ErrInvalidClient", err)
+	}
+}
+
+func TestDialRequiresTLSAndAppliesClientLimits(t *testing.T) {
+	if _, _, err := Dial(context.Background(), "127.0.0.1:1", DialConfig{}); !errors.Is(err, ErrInvalidClient) {
+		t.Fatalf("Dial without TLS error = %v, want ErrInvalidClient", err)
+	}
+	client, connection, err := Dial(context.Background(), "127.0.0.1:1", DialConfig{Credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS13})})
+	if err != nil || client == nil || connection == nil {
+		t.Fatalf("Dial = client %#v, connection %#v, error %v", client, connection, err)
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatalf("close client connection: %v", err)
 	}
 }

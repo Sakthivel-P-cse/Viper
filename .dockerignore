@@ -1,0 +1,10 @@
+.git
+.github
+.tools
+.runtime
+dist
+*.key
+*.crt
+*.pem
+*.backup
+*.jsonl

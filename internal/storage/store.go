@@ -39,6 +39,7 @@ type preparedBatch struct {
 // reopened before it accepts more writes.
 type Store struct {
 	directory string
+	lock      *os.File
 	wal       *os.File
 	snapshot  *raft.Snapshot
 	unhealthy error
@@ -66,44 +67,46 @@ func Open(directory string) (*Store, error) {
 	if !info.IsDir() {
 		return nil, invalid("storage path is not a directory")
 	}
+	lock, err := acquireStoreLock(directory)
+	if err != nil {
+		return nil, err
+	}
+	failOpen := func(openErr error) (*Store, error) {
+		return nil, errors.Join(openErr, releaseStoreLock(lock))
+	}
 
 	snapshot, err := loadSnapshot(filepath.Join(directory, snapshotFilename))
 	if err != nil {
-		return nil, err
+		return failOpen(err)
 	}
 	walPath := filepath.Join(directory, walFilename)
 	if walInfo, statErr := os.Lstat(walPath); statErr == nil && !walInfo.Mode().IsRegular() {
-		return nil, invalid("write-ahead log is not a regular file")
+		return failOpen(invalid("write-ahead log is not a regular file"))
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-		return nil, fmt.Errorf("stat write-ahead log: %w", statErr)
+		return failOpen(fmt.Errorf("stat write-ahead log: %w", statErr))
 	}
 	wal, err := os.OpenFile(walPath, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- walPath appends a fixed filename to the validated store root.
 	if err != nil {
-		return nil, fmt.Errorf("open write-ahead log: %w", err)
+		return failOpen(fmt.Errorf("open write-ahead log: %w", err))
 	}
 	if err = wal.Chmod(0o600); err != nil {
-		_ = wal.Close()
-		return nil, fmt.Errorf("secure write-ahead log: %w", err)
+		return failOpen(errors.Join(fmt.Errorf("secure write-ahead log: %w", err), wal.Close()))
 	}
 	if err = syncDirectory(directory, nil, failureNone); err != nil {
-		_ = wal.Close()
-		return nil, fmt.Errorf("sync storage directory: %w", err)
+		return failOpen(errors.Join(fmt.Errorf("sync storage directory: %w", err), wal.Close()))
 	}
 	state, err := replayWAL(wal)
 	if err != nil {
-		_ = wal.Close()
-		return nil, err
+		return failOpen(errors.Join(err, wal.Close()))
 	}
 	state, err = reconcileSnapshot(state, snapshot)
 	if err != nil {
-		_ = wal.Close()
-		return nil, err
+		return failOpen(errors.Join(err, wal.Close()))
 	}
 	if _, err = wal.Seek(0, io.SeekEnd); err != nil {
-		_ = wal.Close()
-		return nil, fmt.Errorf("seek write-ahead log: %w", err)
+		return failOpen(errors.Join(fmt.Errorf("seek write-ahead log: %w", err), wal.Close()))
 	}
-	return &Store{directory: directory, wal: wal, state: state, snapshot: snapshot}, nil
+	return &Store{directory: directory, lock: lock, wal: wal, state: state, snapshot: snapshot}, nil
 }
 
 // State returns an isolated copy of the recovered durable state.
@@ -190,13 +193,14 @@ func (s *Store) Close() error {
 		return nil
 	}
 	s.closed = true
-	if s.wal == nil {
-		return nil
+	var closeErr error
+	if s.wal != nil {
+		closeErr = errors.Join(closeErr, s.wal.Close())
+		s.wal = nil
 	}
-	if err := s.wal.Close(); err != nil {
-		return fmt.Errorf("close write-ahead log: %w", err)
-	}
-	return nil
+	closeErr = errors.Join(closeErr, releaseStoreLock(s.lock))
+	s.lock = nil
+	return closeErr
 }
 
 func (s *Store) healthError() error {
@@ -459,7 +463,7 @@ func validateHardStateTransition(current, next raft.HardState) error {
 	if next.CommitIndex < current.CommitIndex {
 		return invalid("commit index cannot decrease")
 	}
-	if next.CurrentTerm == current.CurrentTerm && next.VotedFor != current.VotedFor {
+	if next.CurrentTerm == current.CurrentTerm && current.VotedFor != "" && next.VotedFor != current.VotedFor {
 		return invalid("vote cannot change within a term")
 	}
 	if next.CurrentTerm == 0 && next.VotedFor != "" {

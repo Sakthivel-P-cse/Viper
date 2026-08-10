@@ -17,12 +17,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const defaultMaxConcurrentPeerRequests = 256
+
 // GRPCServerConfig configures the TLS-protected Raft peer RPC server.
 // Certificate issuance and peer identity authorization are owned by the
 // process wiring and security layers.
 type GRPCServerConfig struct {
-	Credentials credentials.TransportCredentials
-	Options     []grpc.ServerOption
+	Credentials   credentials.TransportCredentials
+	MaxConcurrent int
+	Options       []grpc.ServerOption
 }
 
 // NewPeerGRPCServer builds a TLS-only, size-bounded peer RPC server.
@@ -39,15 +42,36 @@ func NewPeerGRPCServer(cluster *StaticCluster, handler raft.PeerHandler, config 
 	if config.Credentials.Info().SecurityProtocol != "tls" {
 		return nil, invalidCluster("peer server credentials must use TLS")
 	}
+	maxConcurrent := config.MaxConcurrent
+	if maxConcurrent == 0 {
+		maxConcurrent = defaultMaxConcurrentPeerRequests
+	}
+	if maxConcurrent < 1 || maxConcurrent > 4096 {
+		return nil, invalidCluster("max concurrent peer requests must be between 1 and 4096")
+	}
 	options := append([]grpc.ServerOption(nil), config.Options...)
 	options = append(options,
 		grpc.Creds(config.Credentials),
 		grpc.MaxRecvMsgSize(contracts.MaxRPCMessageBytes),
 		grpc.MaxSendMsgSize(contracts.MaxRPCMessageBytes),
+		grpc.ChainUnaryInterceptor(boundedPeerUnaryInterceptor(maxConcurrent)),
 	)
 	server := grpc.NewServer(options...)
 	apiv1.RegisterRaftPeerServiceServer(server, &peerRPCServer{cluster: cluster, handler: handler})
 	return server, nil
+}
+
+func boundedPeerUnaryInterceptor(maxConcurrent int) grpc.UnaryServerInterceptor {
+	limit := make(chan struct{}, maxConcurrent)
+	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		select {
+		case limit <- struct{}{}:
+			defer func() { <-limit }()
+		default:
+			return nil, status.Error(codes.ResourceExhausted, "peer resource limit exceeded")
+		}
+		return handler(ctx, request)
+	}
 }
 
 type peerRPCServer struct {
@@ -122,9 +146,11 @@ func peerStatus(err error) error {
 		return status.Error(codes.PermissionDenied, "node is not a cluster member")
 	case errors.Is(err, ErrInvalidMessage), errors.Is(err, ErrInvalidCluster):
 		return status.Error(codes.InvalidArgument, "invalid peer request")
+	case errors.Is(err, raft.ErrInvalidMessage):
+		return status.Error(codes.InvalidArgument, "invalid peer request")
 	case errors.Is(err, ErrOverloaded):
 		return status.Error(codes.ResourceExhausted, "peer is overloaded")
-	case errors.Is(err, ErrClosed), errors.Is(err, ErrPeerUnavailable):
+	case errors.Is(err, ErrClosed), errors.Is(err, ErrPeerUnavailable), errors.Is(err, raft.ErrUnavailable), errors.Is(err, raft.ErrNoQuorum):
 		return status.Error(codes.Unavailable, "peer is unavailable")
 	default:
 		return status.Error(codes.Internal, "peer request failed")
@@ -134,6 +160,7 @@ func peerStatus(err error) error {
 // GRPCDialConfig configures static outbound peer connections.
 type GRPCDialConfig struct {
 	Credentials        credentials.TransportCredentials
+	CredentialsForPeer func(Peer) (credentials.TransportCredentials, error)
 	MaxInFlightPerPeer int
 	Options            []grpc.DialOption
 }
@@ -166,10 +193,10 @@ func DialGRPC(ctx context.Context, cluster *StaticCluster, config GRPCDialConfig
 	if cluster == nil {
 		return nil, invalidCluster("cluster is nil")
 	}
-	if config.Credentials == nil {
+	if config.Credentials == nil && config.CredentialsForPeer == nil {
 		return nil, invalidCluster("peer client TLS credentials are required")
 	}
-	if config.Credentials.Info().SecurityProtocol != "tls" {
+	if config.Credentials != nil && config.Credentials.Info().SecurityProtocol != "tls" {
 		return nil, invalidCluster("peer client credentials must use TLS")
 	}
 	limit := config.MaxInFlightPerPeer
@@ -186,12 +213,26 @@ func DialGRPC(ctx context.Context, cluster *StaticCluster, config GRPCDialConfig
 		peers:   make(map[raft.NodeID]*grpcPeer, len(cluster.RemotePeers())),
 	}
 	for _, peer := range cluster.RemotePeers() {
-		peerCredentials := config.Credentials.Clone()
-		if peer.ServerName != "" {
-			if err := peerCredentials.OverrideServerName(peer.ServerName); err != nil {
+		var peerCredentials credentials.TransportCredentials
+		if config.CredentialsForPeer != nil {
+			var credentialErr error
+			peerCredentials, credentialErr = config.CredentialsForPeer(peer)
+			if credentialErr != nil || peerCredentials == nil {
 				transport.closeConnections()
-				return nil, invalidCluster(fmt.Sprintf("peer %q has an invalid TLS server name", peer.ID))
+				return nil, invalidCluster(fmt.Sprintf("peer %q has invalid TLS credentials", peer.ID))
 			}
+		} else {
+			peerCredentials = config.Credentials.Clone()
+			if peer.ServerName != "" {
+				if err := peerCredentials.OverrideServerName(peer.ServerName); err != nil {
+					transport.closeConnections()
+					return nil, invalidCluster(fmt.Sprintf("peer %q has an invalid TLS server name", peer.ID))
+				}
+			}
+		}
+		if peerCredentials.Info().SecurityProtocol != "tls" {
+			transport.closeConnections()
+			return nil, invalidCluster(fmt.Sprintf("peer %q credentials must use TLS", peer.ID))
 		}
 		options := append([]grpc.DialOption(nil), config.Options...)
 		options = append(options,
@@ -333,7 +374,7 @@ func normalizeClientError(err error) error {
 	case codes.InvalidArgument:
 		return ErrInvalidMessage
 	case codes.Unavailable:
-		return ErrPeerUnavailable
+		return unavailableError(ErrPeerUnavailable)
 	default:
 		return err
 	}

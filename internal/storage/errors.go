@@ -14,6 +14,11 @@ var (
 	ErrCorrupt = errors.New("storage corruption detected")
 	// ErrUnhealthy indicates an uncertain filesystem result that requires reopen.
 	ErrUnhealthy = errors.New("storage requires recovery")
+	// ErrLocked indicates that another process currently owns the store directory.
+	ErrLocked = errors.New("storage directory is already in use")
+	// ErrLockUnsupported indicates that the current platform cannot enforce
+	// single-process store ownership.
+	ErrLockUnsupported = errors.New("storage directory locking is unsupported")
 )
 
 // CorruptionError reports a safe location and reason without exposing values.

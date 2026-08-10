@@ -56,6 +56,21 @@ func TestPersistAndRecover(t *testing.T) {
 	}
 }
 
+func TestStoreEnforcesSingleProcessOwnership(t *testing.T) {
+	directory := t.TempDir()
+	first := openTestStore(t, directory)
+	if _, err := Open(directory); !errors.Is(err, ErrLocked) {
+		t.Fatalf("second store open error = %v, want ErrLocked", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+	second := openTestStore(t, directory)
+	if err := second.Close(); err != nil {
+		t.Fatalf("close second store: %v", err)
+	}
+}
+
 func TestInvalidBatchDoesNotMutateState(t *testing.T) {
 	store := openTestStore(t, t.TempDir())
 	t.Cleanup(func() { _ = store.Close() })

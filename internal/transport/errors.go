@@ -3,7 +3,16 @@ package transport
 import (
 	"errors"
 	"fmt"
+
+	"viper/internal/raft"
 )
+
+func unavailableError(err error) error {
+	if err == nil {
+		return errors.Join(ErrPeerUnavailable, raft.ErrUnavailable)
+	}
+	return errors.Join(err, ErrPeerUnavailable, raft.ErrUnavailable)
+}
 
 var (
 	// ErrClosed indicates that a transport or network no longer accepts work.

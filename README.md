@@ -5,14 +5,16 @@ Raft consensus. The production baseline targets linearizable writes and reads,
 durable recovery, authenticated transport, bounded resource use, and explicit
 operational behavior.
 
-The implementation is being delivered phase by phase. The baseline established
-versioned contracts, package boundaries, build checks, and test infrastructure.
-The storage baseline adds checksummed WAL persistence, fail-closed recovery,
-atomic snapshots, and checkpoint compaction. Transport, state-machine, and
-client-adapter foundations are now present, while the Raft core and its
-integration remain the next correctness gate. See the [industry-grade design](docs/industry-grade/design.md),
+The implementation now includes the deterministic Raft core, checksummed WAL
+recovery, static in-memory and TLS peer transport, replicated KV service
+handlers, authenticated gRPC construction, snapshots, backups, a bounded
+linearizability checker, deterministic chaos fixtures, and a local CLI runtime.
+The consolidated verification pass is green for the current bounded scope. See
+the [industry-grade design](docs/industry-grade/design.md),
 the [storage durability contract](docs/industry-grade/storage.md), and
-`documentation.md` for the original project documentation.
+the [local runbook](docs/runbook.md) for supported usage. `documentation.md`
+remains the original project proposal and is subordinate to the industry-grade
+baseline.
 
 ## Module boundaries
 
@@ -39,6 +41,22 @@ Requirements: Go 1.26+, Buf 1.72+, and `rg`.
 ```bash
 make verify
 ```
+
+Run the safe local demo with:
+
+```bash
+go run ./cmd/viper demo
+```
+
+Use `go run ./cmd/viper serve -config ...` only with pre-provisioned storage,
+static membership, and TLS files. The local demo is not a production
+availability claim. A repeatable authenticated local process cluster is
+available under [deploy/compose](deploy/compose/README.md), and release
+evidence requirements are documented in [docs/release.md](docs/release.md).
+
+The `probe` command performs one authenticated Put and linearizable Get
+against a running endpoint. It requires a client certificate and CA and never
+prints credentials.
 
 The module path is intentionally local (`viper`) until the repository receives
 a stable public URL. It must be changed once, before publishing generated API

@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 
@@ -173,7 +174,7 @@ func (t *InMemoryTransport) RequestVote(ctx context.Context, target raft.NodeID,
 	}
 	endpoint, err := t.network.lookup(target)
 	if err != nil {
-		return raft.RequestVoteResponse{}, err
+		return raft.RequestVoteResponse{}, unavailableError(err)
 	}
 	if err := endpoint.acquire(ctx); err != nil {
 		return raft.RequestVoteResponse{}, err
@@ -181,6 +182,9 @@ func (t *InMemoryTransport) RequestVote(ctx context.Context, target raft.NodeID,
 	defer endpoint.release()
 	response, err := endpoint.handler.HandleRequestVote(ctx, cloneRequestVote(request))
 	if err != nil {
+		if errors.Is(err, ErrPeerUnavailable) {
+			return raft.RequestVoteResponse{}, unavailableError(err)
+		}
 		return raft.RequestVoteResponse{}, err
 	}
 	if err := validateRequestVoteResponse(request, response); err != nil {
@@ -202,7 +206,7 @@ func (t *InMemoryTransport) AppendEntries(ctx context.Context, target raft.NodeI
 	}
 	endpoint, err := t.network.lookup(target)
 	if err != nil {
-		return raft.AppendEntriesResponse{}, err
+		return raft.AppendEntriesResponse{}, unavailableError(err)
 	}
 	if err := endpoint.acquire(ctx); err != nil {
 		return raft.AppendEntriesResponse{}, err
@@ -210,6 +214,9 @@ func (t *InMemoryTransport) AppendEntries(ctx context.Context, target raft.NodeI
 	defer endpoint.release()
 	response, err := endpoint.handler.HandleAppendEntries(ctx, cloneAppendEntries(request))
 	if err != nil {
+		if errors.Is(err, ErrPeerUnavailable) {
+			return raft.AppendEntriesResponse{}, unavailableError(err)
+		}
 		return raft.AppendEntriesResponse{}, err
 	}
 	if err := validateAppendEntriesResponse(request, response); err != nil {
@@ -231,7 +238,7 @@ func (t *InMemoryTransport) InstallSnapshot(ctx context.Context, target raft.Nod
 	}
 	endpoint, err := t.network.lookup(target)
 	if err != nil {
-		return raft.InstallSnapshotResponse{}, err
+		return raft.InstallSnapshotResponse{}, unavailableError(err)
 	}
 	if err := endpoint.acquire(ctx); err != nil {
 		return raft.InstallSnapshotResponse{}, err
@@ -239,6 +246,9 @@ func (t *InMemoryTransport) InstallSnapshot(ctx context.Context, target raft.Nod
 	defer endpoint.release()
 	response, err := endpoint.handler.HandleInstallSnapshot(ctx, cloneInstallSnapshot(request))
 	if err != nil {
+		if errors.Is(err, ErrPeerUnavailable) {
+			return raft.InstallSnapshotResponse{}, unavailableError(err)
+		}
 		return raft.InstallSnapshotResponse{}, err
 	}
 	if err := validateInstallSnapshotResponse(request, response); err != nil {

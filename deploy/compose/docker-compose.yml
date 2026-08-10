@@ -1,0 +1,65 @@
+services:
+  node-1:
+    build:
+      context: ../..
+    image: viper:local
+    command: ["serve", "-config", "/etc/viper/config.json"]
+    user: "${VIPER_UID:-65532}:${VIPER_GID:-65532}"
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev
+    volumes:
+      - ../../.runtime/data/node-1:/var/lib/viper/node-1
+      - ../../.runtime/config/node-1.json:/etc/viper/config.json:ro
+      - ../../.runtime/tls:/etc/viper/tls:ro
+    ports:
+      - "127.0.0.1:7401:7401"
+      - "127.0.0.1:7501:7501"
+    networks: [viper]
+
+  node-2:
+    build:
+      context: ../..
+    image: viper:local
+    command: ["serve", "-config", "/etc/viper/config.json"]
+    user: "${VIPER_UID:-65532}:${VIPER_GID:-65532}"
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev
+    volumes:
+      - ../../.runtime/data/node-2:/var/lib/viper/node-2
+      - ../../.runtime/config/node-2.json:/etc/viper/config.json:ro
+      - ../../.runtime/tls:/etc/viper/tls:ro
+    networks: [viper]
+
+  node-3:
+    build:
+      context: ../..
+    image: viper:local
+    command: ["serve", "-config", "/etc/viper/config.json"]
+    user: "${VIPER_UID:-65532}:${VIPER_GID:-65532}"
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev
+    volumes:
+      - ../../.runtime/data/node-3:/var/lib/viper/node-3
+      - ../../.runtime/config/node-3.json:/etc/viper/config.json:ro
+      - ../../.runtime/tls:/etc/viper/tls:ro
+    networks: [viper]
+
+networks:
+  viper:
+    driver: bridge
+    internal: true

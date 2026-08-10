@@ -41,7 +41,8 @@ histories can be exhaustively checked.
 - Emit structured, redacted logs with correlation IDs. Never log request
   bodies, values, tokens, cookies, or database credentials.
 - Support graceful shutdown, restart, rolling upgrade compatibility, backup,
-  restore, timeouts, cancellation, and clear operator runbooks.
+  restore, timeouts, cancellation, and clear operator runbooks. The current
+  release uses a maintenance upgrade boundary until mixed-version tests exist.
 - Define an availability and durability SLO, capacity limits, supported
   topology, backup RPO/RTO, and upgrade policy before production release.
 - Keep the checker independent from Raft and KV implementation packages. Use it
@@ -214,4 +215,3 @@ host five-container setup is not described as highly available.
 - Claiming compatibility with etcd or another product without conformance work.
 - Treating the current 13-section proposal as an implementation plan or proof
   of production readiness.
-

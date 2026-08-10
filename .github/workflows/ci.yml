@@ -1,0 +1,40 @@
+name: viper-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run verification gate
+        run: make verify
+      - name: Run dependency and secret scans
+        run: make security-check
+      - name: Build source packages
+        run: make build
+      - name: Run benchmark smoke checks
+        run: go test -run '^$' -bench . -benchmem ./internal/statemachine ./internal/storage
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Build the non-root runtime image
+        run: docker build --pull --tag viper:ci .

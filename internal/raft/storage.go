@@ -52,3 +52,12 @@ type StableStore interface {
 	SaveSnapshot(Snapshot) error
 	Close() error
 }
+
+// SnapshotStore is the optional durable-installation extension used when a
+// follower receives a snapshot whose covered log prefix is not locally
+// available. Implementations must activate the snapshot atomically and keep
+// the supplied hard state monotonic.
+type SnapshotStore interface {
+	StableStore
+	InstallSnapshot(Snapshot, HardState) error
+}

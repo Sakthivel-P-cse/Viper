@@ -20,6 +20,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install local verification tools
+        run: make tools
       - name: Run verification gate
         run: make verify
       - name: Run dependency and secret scans

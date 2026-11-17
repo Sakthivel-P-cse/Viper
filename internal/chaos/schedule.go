@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"time"
 )
@@ -74,6 +75,10 @@ func Decode(data []byte) (Schedule, error) {
 	var schedule Schedule
 	if err := decoder.Decode(&schedule); err != nil {
 		return Schedule{}, fmt.Errorf("%w: invalid JSON", ErrInvalidSchedule)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return Schedule{}, fmt.Errorf("%w: trailing data", ErrInvalidSchedule)
 	}
 	if err := Validate(schedule); err != nil {
 		return Schedule{}, err

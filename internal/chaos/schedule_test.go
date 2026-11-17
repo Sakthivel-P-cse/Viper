@@ -141,3 +141,21 @@ func TestScheduleRejectsUnsafeFaults(t *testing.T) {
 		}
 	}
 }
+
+func TestScheduleDecodeRejectsTrailingData(t *testing.T) {
+	encoded, err := Encode(Schedule{Version: ScheduleVersion, Seed: 1})
+	if err != nil {
+		t.Fatalf("encode schedule: %v", err)
+	}
+	if _, err := Decode(append(append([]byte(nil), encoded...), []byte(" \n\t")...)); err != nil {
+		t.Fatalf("decode schedule with trailing whitespace: %v", err)
+	}
+	for name, suffix := range map[string]string{"second JSON value": ` {}`, "non-JSON data": " trailing"} {
+		t.Run(name, func(t *testing.T) {
+			data := append(append([]byte(nil), encoded...), suffix...)
+			if _, err := Decode(data); err == nil {
+				t.Fatal("schedule with trailing data was accepted")
+			}
+		})
+	}
+}

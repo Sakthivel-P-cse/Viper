@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"viper/pkg/contracts"
 )
@@ -86,6 +87,10 @@ func Decode(data []byte) (History, error) {
 	var history History
 	if err := decoder.Decode(&history); err != nil {
 		return History{}, fmt.Errorf("%w: invalid JSON", ErrInvalidHistory)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return History{}, fmt.Errorf("%w: trailing data", ErrInvalidHistory)
 	}
 	if err := Validate(history); err != nil {
 		return History{}, err

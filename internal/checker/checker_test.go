@@ -73,3 +73,24 @@ func TestHistoryRejectsUnknownFieldsAndOversizedOperations(t *testing.T) {
 		t.Fatal("oversized history was accepted")
 	}
 }
+
+func TestHistoryDecodeRejectsTrailingData(t *testing.T) {
+	encoded, err := Encode(History{Version: HistoryVersion, Operations: []Operation{{
+		ID: "op-1", Kind: OperationGet, Consistency: ConsistencyLinearizable,
+		Key: []byte("key"), Invocation: 1, Completion: 2,
+	}}})
+	if err != nil {
+		t.Fatalf("encode history: %v", err)
+	}
+	if _, err := Decode(append(append([]byte(nil), encoded...), []byte(" \n\t")...)); err != nil {
+		t.Fatalf("decode history with trailing whitespace: %v", err)
+	}
+	for name, suffix := range map[string]string{"second JSON value": ` {}`, "non-JSON data": " trailing"} {
+		t.Run(name, func(t *testing.T) {
+			data := append(append([]byte(nil), encoded...), suffix...)
+			if _, err := Decode(data); err == nil {
+				t.Fatal("history with trailing data was accepted")
+			}
+		})
+	}
+}

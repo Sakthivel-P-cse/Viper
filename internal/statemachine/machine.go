@@ -74,6 +74,15 @@ func (m *Machine) Apply(index uint64, encoded []byte) (Result, error) {
 	if m == nil {
 		return Result{}, fmt.Errorf("%w: machine is nil", ErrOutOfOrder)
 	}
+	if len(encoded) == 0 {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if index == 0 || index != m.appliedIndex+1 {
+			return Result{}, fmt.Errorf("%w: got %d after %d", ErrOutOfOrder, index, m.appliedIndex)
+		}
+		m.appliedIndex = index
+		return Result{}, nil
+	}
 	command, err := DecodeCommand(encoded)
 	if err != nil {
 		return Result{}, err

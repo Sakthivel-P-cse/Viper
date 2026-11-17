@@ -510,6 +510,30 @@ func (n *Node) ReadIndex(ctx context.Context) (Index, error) {
 	if n.quorumLocked() > 1 && n.transport == nil {
 		return 0, ErrUnavailable
 	}
+	commitTerm, _ := n.termAtLocked(n.commitIndex)
+	if commitTerm != n.term {
+		if n.lastLogTermLocked() != n.term {
+			index := n.lastLogIndexLocked()
+			if index == Index(math.MaxUint64) {
+				return 0, fmt.Errorf("%w: log index overflow", ErrInvalidMessage)
+			}
+			entry := Entry{Index: index + 1, Term: n.term}
+			hardState := n.hardStateLocked(n.commitIndex)
+			if err := n.persistLocked(PersistBatch{HardState: &hardState, Entries: []Entry{entry}}); err != nil {
+				return 0, err
+			}
+			n.log = append(n.log, entry)
+			n.matchIndex[n.id] = entry.Index
+			n.nextIndex[n.id] = entry.Index + 1
+		}
+		if err := n.broadcastReplicationLocked(); err != nil {
+			return 0, err
+		}
+		commitTerm, _ = n.termAtLocked(n.commitIndex)
+		if commitTerm != n.term {
+			return 0, ErrNoQuorum
+		}
+	}
 	confirmed := 1
 	for _, peer := range n.peers {
 		if peer == n.id || confirmed >= n.quorumLocked() {

@@ -20,6 +20,10 @@ as a maintenance event:
    commit, and build date through `go run ./cmd/viper version` or the release
    binary's `version` command.
 
+Linearizable reads may persist empty Raft entries as read barriers. Older
+binaries that cannot apply these entries must not open a store containing
+them; use a compatible backup when rolling back.
+
 Dynamic membership and joint consensus are outside this compatibility
 boundary. A peer-set edit requires a separately reviewed protocol and operator
 workflow.

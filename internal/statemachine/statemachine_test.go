@@ -8,6 +8,16 @@ import (
 	"viper/pkg/contracts"
 )
 
+func TestApplyRaftBarrierAdvancesIndexWithoutMutation(t *testing.T) {
+	machine := New()
+	if _, err := machine.Apply(1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if machine.AppliedIndex() != 1 || machine.Revision() != 0 {
+		t.Fatalf("index = %d, revision = %d", machine.AppliedIndex(), machine.Revision())
+	}
+}
+
 func commandBytes(t *testing.T, command Command) []byte {
 	t.Helper()
 	encoded, err := EncodeCommand(command)

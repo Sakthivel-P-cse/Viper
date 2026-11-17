@@ -270,6 +270,33 @@ func TestAppendRequestBoundsBytesAsWellAsEntries(t *testing.T) {
 	}
 }
 
+func TestReadIndexCommitsCurrentTermBarrier(t *testing.T) {
+	clock := NewManualClock(time.Unix(0, 0))
+	ids := []NodeID{"node-1", "node-2", "node-3"}
+	nodes := make(map[NodeID]*Node)
+	for _, id := range ids {
+		store := &testStore{state: PersistentState{HardState: HardState{CurrentTerm: 1}, Entries: []Entry{{Index: 1, Term: 1, Command: []byte("previous")}}}}
+		node, err := New(Config{ID: id, Peers: ids, Store: store, Clock: clock, ElectionTimeoutMin: time.Second, ElectionTimeoutMax: time.Second, Apply: func(Entry) error { return nil }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		nodes[id] = node
+	}
+	for _, node := range nodes {
+		if err := node.AttachTransport(&testTransport{nodes: nodes}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	clock.Advance(time.Second)
+	if err := nodes["node-1"].Tick(); err != nil {
+		t.Fatal(err)
+	}
+	index, err := nodes["node-1"].ReadIndex(context.Background())
+	if err != nil || index != 2 {
+		t.Fatalf("read index = %d, error = %v; want current-term barrier at 2", index, err)
+	}
+}
+
 func TestPersistenceFailureMakesNodeUnavailableBeforeAcknowledgement(t *testing.T) {
 	failure := errors.New("disk full")
 	store := &testStore{fail: failure}

@@ -565,9 +565,6 @@ func reconcileSnapshot(state recoveredState, snapshot *raft.Snapshot) (recovered
 		}
 		return state, nil
 	}
-	if state.baseIndex != 0 && (state.baseIndex != snapshot.Index || state.baseTerm != snapshot.Term) {
-		return recoveredState{}, corrupt(0, "checkpoint does not match snapshot")
-	}
 	if state.hardState.CommitIndex < snapshot.Index || state.hardState.CurrentTerm < snapshot.Term {
 		return recoveredState{}, corrupt(0, "snapshot exceeds durable hard state")
 	}

@@ -298,6 +298,27 @@ func TestRecoveryHandlesSnapshotActivationBeforeWALCompaction(t *testing.T) {
 	}
 }
 
+func TestRecoveryHandlesSecondSnapshotBeforeWALCompaction(t *testing.T) {
+	directory := t.TempDir()
+	store := openTestStore(t, directory)
+	seedThreeEntries(t, store)
+	if err := store.SaveSnapshot(raft.Snapshot{Index: 1, Term: 1, Data: []byte("first")}); err != nil {
+		t.Fatal(err)
+	}
+	store.inject = failAt(failureWALCompactWrite)
+	snapshot := raft.Snapshot{Index: 2, Term: 1, Data: []byte("second")}
+	if err := store.SaveSnapshot(snapshot); !errors.Is(err, ErrUnhealthy) {
+		t.Fatalf("SaveSnapshot error = %v", err)
+	}
+	_ = store.Close()
+	recovered := openTestStore(t, directory)
+	defer recovered.Close()
+	state, err := recovered.State()
+	if err != nil || !reflect.DeepEqual(state.Snapshot, &snapshot) || len(state.Entries) != 1 || state.Entries[0].Index != 3 {
+		t.Fatalf("state = %#v, error = %v", state, err)
+	}
+}
+
 func TestRecoveryFailsClosedOnSnapshotCorruption(t *testing.T) {
 	directory := t.TempDir()
 	store := openTestStore(t, directory)

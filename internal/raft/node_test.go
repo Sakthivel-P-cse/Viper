@@ -226,6 +226,31 @@ func TestRequestVoteRestrictionAndAppendConflictReplacement(t *testing.T) {
 	}
 }
 
+func TestAppendDoesNotCommitUnmatchedSuffix(t *testing.T) {
+	store := &testStore{state: PersistentState{HardState: HardState{CurrentTerm: 2}, Entries: []Entry{
+		{Index: 1, Term: 1, Command: []byte("matching")},
+		{Index: 2, Term: 1, Command: []byte("divergent")},
+	}}}
+	var applied []string
+	node, err := New(Config{ID: "node-2", Peers: []NodeID{"node-1", "node-2", "node-3"}, Store: store, Apply: func(entry Entry) error {
+		applied = append(applied, string(entry.Command))
+		return nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := node.HandleAppendEntries(context.Background(), AppendEntriesRequest{
+		Term: 2, LeaderID: "node-1", LeaderCommit: 2,
+		Entries: []Entry{{Index: 1, Term: 1, Command: []byte("matching")}},
+	})
+	if err != nil || !response.Success {
+		t.Fatalf("append = %#v, %v", response, err)
+	}
+	if state := node.State(); state.CommitIndex != 1 || len(applied) != 1 || applied[0] != "matching" {
+		t.Fatalf("state = %#v, applied = %v", state, applied)
+	}
+}
+
 func TestPersistenceFailureMakesNodeUnavailableBeforeAcknowledgement(t *testing.T) {
 	failure := errors.New("disk full")
 	store := &testStore{fail: failure}

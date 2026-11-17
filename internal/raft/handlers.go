@@ -92,12 +92,7 @@ func (n *Node) HandleAppendEntries(_ context.Context, request AppendEntriesReque
 		}
 		return AppendEntriesResponse{Term: n.term, ConflictIndex: conflictIndex}, nil
 	}
-	newLast := n.lastLogIndexLocked()
-	if len(suffix) > 0 {
-		newLast = suffix[len(suffix)-1].Index
-	} else if truncateFrom != nil {
-		newLast = truncateFromValue(*truncateFrom, n)
-	}
+	newLast := request.PrevLogIndex + Index(len(request.Entries))
 	commitTarget := request.LeaderCommit
 	if commitTarget > newLast {
 		commitTarget = newLast

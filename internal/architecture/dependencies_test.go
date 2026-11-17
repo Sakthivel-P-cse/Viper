@@ -18,7 +18,7 @@ func TestProductionDependencyDirection(t *testing.T) {
 	allowed := map[string]map[string]bool{
 		"raft":          {},
 		"storage":       {"raft": true, "statemachine": true},
-		"transport":     {"raft": true},
+		"transport":     {"raft": true, "security": true},
 		"statemachine":  {},
 		"service":       {"observability": true, "raft": true, "security": true, "statemachine": true},
 		"security":      {},

@@ -9,11 +9,13 @@ import (
 
 	apiv1 "viper/api/gen/v1"
 	"viper/internal/raft"
+	"viper/internal/security"
 	"viper/pkg/contracts"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -88,6 +90,9 @@ func (s *peerRPCServer) RequestVote(ctx context.Context, message *apiv1.RequestV
 	if err := validateRequestVote(s.cluster, request); err != nil {
 		return nil, peerStatus(err)
 	}
+	if err := authorizePeer(ctx, request.CandidateID); err != nil {
+		return nil, err
+	}
 	response, err := s.handler.HandleRequestVote(ctx, request)
 	if err != nil {
 		return nil, peerStatus(err)
@@ -105,6 +110,9 @@ func (s *peerRPCServer) AppendEntries(ctx context.Context, message *apiv1.Append
 	}
 	if err := validateAppendEntries(s.cluster, request); err != nil {
 		return nil, peerStatus(err)
+	}
+	if err := authorizePeer(ctx, request.LeaderID); err != nil {
+		return nil, err
 	}
 	response, err := s.handler.HandleAppendEntries(ctx, request)
 	if err != nil {
@@ -124,6 +132,9 @@ func (s *peerRPCServer) InstallSnapshot(ctx context.Context, message *apiv1.Inst
 	if err := validateInstallSnapshot(s.cluster, request); err != nil {
 		return nil, peerStatus(err)
 	}
+	if err := authorizePeer(ctx, request.LeaderID); err != nil {
+		return nil, err
+	}
 	response, err := s.handler.HandleInstallSnapshot(ctx, request)
 	if err != nil {
 		return nil, peerStatus(err)
@@ -132,6 +143,22 @@ func (s *peerRPCServer) InstallSnapshot(ctx context.Context, message *apiv1.Inst
 		return nil, status.Error(codes.Internal, "peer handler returned an invalid response")
 	}
 	return installSnapshotResponseToProto(response), nil
+}
+
+func authorizePeer(ctx context.Context, id raft.NodeID) error {
+	info, ok := peer.FromContext(ctx)
+	if !ok || info == nil {
+		return status.Error(codes.Unauthenticated, "peer identity required")
+	}
+	tlsInfo, ok := info.AuthInfo.(credentials.TLSInfo)
+	if !ok || len(tlsInfo.State.PeerCertificates) == 0 || len(tlsInfo.State.VerifiedChains) == 0 {
+		return status.Error(codes.Unauthenticated, "verified peer certificate required")
+	}
+	principal, err := security.PrincipalFromCertificate(tlsInfo.State.PeerCertificates[0])
+	if err != nil || principal.Kind != security.PrincipalPeer || principal.ID != string(id) {
+		return status.Error(codes.PermissionDenied, "peer identity mismatch")
+	}
+	return nil
 }
 
 func peerStatus(err error) error {

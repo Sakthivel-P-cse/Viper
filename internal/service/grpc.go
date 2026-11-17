@@ -190,8 +190,8 @@ func principalFromContext(ctx context.Context) (security.Principal, error) {
 	default:
 		return security.Principal{}, errors.New("non-TLS peer")
 	}
-	if len(tlsInfo.State.PeerCertificates) == 0 {
-		return security.Principal{}, errors.New("missing client certificate")
+	if len(tlsInfo.State.PeerCertificates) == 0 || len(tlsInfo.State.VerifiedChains) == 0 {
+		return security.Principal{}, errors.New("missing verified client certificate")
 	}
 	return security.PrincipalFromCertificate(tlsInfo.State.PeerCertificates[0])
 }

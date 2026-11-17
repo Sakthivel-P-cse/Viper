@@ -33,7 +33,12 @@ func TestAuthorizedUnaryInterceptorRequiresScopedTLSPrincipal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse identity: %v", err)
 	}
-	ctx := peer.NewContext(context.Background(), &peer.Peer{AuthInfo: credentials.TLSInfo{State: tls.ConnectionState{PeerCertificates: []*x509.Certificate{{NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Minute), URIs: []*url.URL{identity}}}}}})
+	certificate := &x509.Certificate{NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Minute), URIs: []*url.URL{identity}}
+	ctx := peer.NewContext(context.Background(), &peer.Peer{AuthInfo: credentials.TLSInfo{State: tls.ConnectionState{PeerCertificates: []*x509.Certificate{certificate}}}})
+	if _, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/viper.api.v1.KVService/Get"}, handler); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("unverified certificate = %v, want Unauthenticated", err)
+	}
+	ctx = peer.NewContext(context.Background(), &peer.Peer{AuthInfo: credentials.TLSInfo{State: tls.ConnectionState{PeerCertificates: []*x509.Certificate{certificate}, VerifiedChains: [][]*x509.Certificate{{certificate}}}}})
 	if response, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/viper.api.v1.KVService/Get"}, handler); err != nil || response != "ok" {
 		t.Fatalf("authorized request = %#v, error = %v", response, err)
 	}

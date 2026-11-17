@@ -3,10 +3,12 @@ package chaos
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"time"
 
 	"viper/internal/raft"
+	"viper/internal/storage"
 	"viper/internal/transport"
 )
 
@@ -25,6 +27,8 @@ type Harness struct {
 	nodes      map[raft.NodeID]*raft.Node
 	transports map[raft.NodeID]*faultTransport
 	handlers   map[raft.NodeID]*faultHandler
+	stores     map[raft.NodeID]*faultStore
+	storeDirs  []string
 	order      []raft.NodeID
 	cursor     *Cursor
 	step       uint64
@@ -66,19 +70,33 @@ func NewHarness(ids []raft.NodeID, schedule Schedule) (*Harness, error) {
 		nodes:      make(map[raft.NodeID]*raft.Node, len(ids)),
 		transports: make(map[raft.NodeID]*faultTransport, len(ids)),
 		handlers:   make(map[raft.NodeID]*faultHandler, len(ids)),
+		stores:     make(map[raft.NodeID]*faultStore, len(ids)),
 		order:      append([]raft.NodeID(nil), ids...),
 		cursor:     cursor,
 	}
 	for _, id := range ids {
+		directory, dirErr := os.MkdirTemp("", "viper-chaos-")
+		if dirErr != nil {
+			_ = harness.Close()
+			return nil, dirErr
+		}
+		harness.storeDirs = append(harness.storeDirs, directory)
+		store, storeErr := storage.Open(directory)
+		if storeErr != nil {
+			_ = harness.Close()
+			return nil, storeErr
+		}
+		faultedStore := &faultStore{Store: store}
+		harness.stores[id] = faultedStore
 		node, nodeErr := raft.New(raft.Config{
-			ID: id, Peers: ids, Clock: harness.clock,
+			ID: id, Peers: ids, Clock: harness.clock, Store: faultedStore,
 			ElectionTimeoutMin: 100 * time.Millisecond,
 			ElectionTimeoutMax: 100 * time.Millisecond,
 			HeartbeatInterval:  10 * time.Millisecond,
 			RPCTimeout:         100 * time.Millisecond,
 		})
 		if nodeErr != nil {
-			_ = network.Close()
+			_ = harness.Close()
 			return nil, nodeErr
 		}
 		harness.nodes[id] = node
@@ -141,10 +159,14 @@ func (h *Harness) Apply(action Action) error {
 				fault.addDuplicates(action.Count)
 			}
 		}
-	case ActionCrash, ActionDiskFailure:
+	case ActionCrash:
 		for _, id := range h.targets(action.Target) {
 			h.handlers[id].setFaulted(true)
 			h.transports[id].setFaulted(true)
+		}
+	case ActionDiskFailure:
+		for _, id := range h.targets(action.Target) {
+			h.stores[id].setFaulted()
 		}
 	default:
 		return ErrInvalidSchedule
@@ -252,7 +274,52 @@ func (h *Harness) Close() error {
 		closeErr = errors.Join(closeErr, node.Close())
 	}
 	closeErr = errors.Join(closeErr, h.network.Close())
+	for _, store := range h.stores {
+		closeErr = errors.Join(closeErr, store.Close())
+	}
+	for _, directory := range h.storeDirs {
+		closeErr = errors.Join(closeErr, os.RemoveAll(directory))
+	}
 	return closeErr
+}
+
+type faultStore struct {
+	*storage.Store
+	mu      sync.RWMutex
+	faulted bool
+}
+
+func (s *faultStore) setFaulted() {
+	s.mu.Lock()
+	s.faulted = true
+	s.mu.Unlock()
+}
+
+func (s *faultStore) Persist(batch raft.PersistBatch) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.faulted {
+		return ErrFaulted
+	}
+	return s.Store.Persist(batch)
+}
+
+func (s *faultStore) SaveSnapshot(snapshot raft.Snapshot) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.faulted {
+		return ErrFaulted
+	}
+	return s.Store.SaveSnapshot(snapshot)
+}
+
+func (s *faultStore) InstallSnapshot(snapshot raft.Snapshot, hardState raft.HardState) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.faulted {
+		return ErrFaulted
+	}
+	return s.Store.InstallSnapshot(snapshot, hardState)
 }
 
 func (h *Harness) targets(target string) []raft.NodeID {

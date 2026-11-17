@@ -94,3 +94,25 @@ func TestHistoryDecodeRejectsTrailingData(t *testing.T) {
 		})
 	}
 }
+
+func TestAmbiguousMutationCanCommitAfterTimeout(t *testing.T) {
+	history := History{Version: HistoryVersion, Operations: []Operation{
+		{ID: "put", Kind: OperationPut, ClientID: "client", RequestID: "request", Key: []byte("key"), NewValue: []byte("value"), ErrorCode: "deadline_exceeded", Invocation: 1, Completion: 2},
+		{ID: "get", Kind: OperationGet, Consistency: ConsistencyLinearizable, Key: []byte("key"), ResultFound: true, ResultValue: []byte("value"), ResultRevision: 1, Succeeded: true, Invocation: 3, Completion: 4},
+	}}
+	if result := Check(history); !result.Linearizable {
+		t.Fatalf("ambiguous committed write rejected: %#v", result)
+	}
+	history.Operations = append(history.Operations[:1], append([]Operation{{
+		ID: "before", Kind: OperationGet, Consistency: ConsistencyLinearizable, Key: []byte("key"),
+		Succeeded: true, Invocation: 3, Completion: 4,
+	}}, history.Operations[1])...)
+	history.Operations[2].Invocation, history.Operations[2].Completion = 5, 6
+	if result := Check(history); !result.Linearizable {
+		t.Fatalf("write committed after timeout was rejected: %#v", result)
+	}
+	history.Operations[0].ErrorCode = "not_leader"
+	if result := Check(history); result.Linearizable {
+		t.Fatalf("rejected write was applied: %#v", result)
+	}
+}

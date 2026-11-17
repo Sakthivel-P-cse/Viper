@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"sort"
+
+	"viper/pkg/contracts"
 )
 
 var (
@@ -100,24 +102,38 @@ func (s *checkerSearch) walk(placed []bool, depth int) bool {
 		if placed[index] || !predecessorsPlaced(s.predecessors[index], placed) {
 			continue
 		}
-		s.explored++
-		previousModel := cloneModel(s.model)
-		previousPathLength := len(s.path)
-		previousHistoryLength := len(s.history)
-		if s.apply(operation) {
-			placed[index] = true
-			s.path = append(s.path, operation.ID)
-			s.history = append(s.history, cloneModel(s.model))
-			s.historyMasks = append(s.historyMasks, placedMask(placed))
-			if s.walk(placed, depth+1) {
-				return true
-			}
-			placed[index] = false
+		choices := 1
+		if ambiguousMutation(operation) {
+			choices = 2
 		}
-		s.model = previousModel
-		s.path = s.path[:previousPathLength]
-		s.history = s.history[:previousHistoryLength]
-		s.historyMasks = s.historyMasks[:previousHistoryLength]
+		for choice := 0; choice < choices; choice++ {
+			if s.explored >= s.limit {
+				s.bounded = true
+				return false
+			}
+			s.explored++
+			previousModel := cloneModel(s.model)
+			previousPathLength := len(s.path)
+			previousHistoryLength := len(s.history)
+			valid := s.apply(operation)
+			if choice == 1 {
+				valid = s.applyMutation(operation)
+			}
+			if valid {
+				placed[index] = true
+				s.path = append(s.path, operation.ID)
+				s.history = append(s.history, cloneModel(s.model))
+				s.historyMasks = append(s.historyMasks, placedMask(placed))
+				if s.walk(placed, depth+1) {
+					return true
+				}
+				placed[index] = false
+			}
+			s.model = previousModel
+			s.path = s.path[:previousPathLength]
+			s.history = s.history[:previousHistoryLength]
+			s.historyMasks = s.historyMasks[:previousHistoryLength]
+		}
 	}
 	return false
 }
@@ -167,7 +183,7 @@ func (s *checkerSearch) applyMutation(operation Operation) bool {
 	requestKey := operation.ClientID + "\x00" + operation.RequestID
 	signature := mutationSignature(operation)
 	if previous, exists := s.model.requests[requestKey]; exists {
-		return previous.signature == signature && mutationOutputEqual(previous.result, operation)
+		return previous.signature == signature && (!operation.Succeeded || mutationOutputEqual(previous.result, operation))
 	}
 	current := s.model.values[string(operation.Key)]
 	result := operation
@@ -193,11 +209,16 @@ func (s *checkerSearch) applyMutation(operation Operation) bool {
 			result.ResultRevision = s.model.revision
 		}
 	}
-	if !mutationOutputEqual(result, operation) {
+	if operation.Succeeded && !mutationOutputEqual(result, operation) {
 		return false
 	}
 	s.model.requests[requestKey] = mutationResult{signature: signature, result: result}
 	return true
+}
+
+func ambiguousMutation(operation Operation) bool {
+	return !operation.Succeeded && operation.Kind != OperationGet &&
+		(operation.ErrorCode == string(contracts.CodeUnavailable) || operation.ErrorCode == string(contracts.CodeDeadlineExceeded))
 }
 
 func equalValue(current valueState, value []byte, found bool, revision uint64) bool {
@@ -263,7 +284,7 @@ func buildPredecessors(operations []Operation) []uint64 {
 			if previous == current {
 				continue
 			}
-			if candidate.Completion < operation.Invocation || candidate.Completion == operation.Invocation && previous < current {
+			if !ambiguousMutation(candidate) && (candidate.Completion < operation.Invocation || candidate.Completion == operation.Invocation && previous < current) {
 				predecessors[current] |= uint64(1) << previous
 			}
 		}

@@ -297,6 +297,32 @@ func TestReadIndexCommitsCurrentTermBarrier(t *testing.T) {
 	}
 }
 
+func TestPeerHandlerHonorsDeadlineWhileNodeIsBusy(t *testing.T) {
+	node, err := New(Config{ID: "node-1", Peers: []NodeID{"node-1", "node-2", "node-3"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.mu.Lock()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := node.HandleRequestVote(ctx, RequestVoteRequest{Term: 1, CandidateID: "node-2"})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		node.mu.Unlock()
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("handler error = %v", err)
+		}
+	case <-time.After(time.Second):
+		node.mu.Unlock()
+		<-done
+		t.Fatal("handler remained blocked after deadline")
+	}
+}
+
 func TestPersistenceFailureMakesNodeUnavailableBeforeAcknowledgement(t *testing.T) {
 	failure := errors.New("disk full")
 	store := &testStore{fail: failure}

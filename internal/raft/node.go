@@ -8,7 +8,6 @@ import (
 	"math"
 	"math/rand"
 	"strings"
-	"sync"
 	"time"
 
 	"viper/pkg/contracts"
@@ -83,7 +82,7 @@ type RuntimeState struct {
 // Node is a deterministic, single-writer Raft state machine. Callers drive it
 // with Tick and proposals; inbound RPC methods are safe for concurrent callers.
 type Node struct {
-	mu sync.Mutex
+	mu nodeMutex
 
 	id        NodeID
 	peers     []NodeID
@@ -119,6 +118,27 @@ type Node struct {
 	healthy   bool
 	closed    bool
 	lastError error
+}
+
+type nodeMutex chan struct{}
+
+func (m nodeMutex) Lock()   { m <- struct{}{} }
+func (m nodeMutex) Unlock() { <-m }
+
+func (m nodeMutex) lockContext(ctx context.Context) error {
+	if ctx == nil {
+		return fmt.Errorf("%w: context is nil", ErrInvalidMessage)
+	}
+	select {
+	case m <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			m.Unlock()
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 type snapshotAssembly struct {
@@ -158,6 +178,7 @@ func New(config Config) (*Node, error) {
 		seed = 1
 	}
 	node := &Node{
+		mu:          make(nodeMutex, 1),
 		id:          config.ID,
 		peers:       append([]NodeID(nil), config.Peers...),
 		peerSet:     make(map[NodeID]struct{}, len(config.Peers)),

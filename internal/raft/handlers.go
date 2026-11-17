@@ -12,11 +12,13 @@ var raftChecksumTable = crc32.MakeTable(crc32.Castagnoli)
 
 // HandleRequestVote implements the Raft election restriction and one-vote-per
 // term rule. Durable term/vote changes complete before a granted response.
-func (n *Node) HandleRequestVote(_ context.Context, request RequestVoteRequest) (RequestVoteResponse, error) {
+func (n *Node) HandleRequestVote(ctx context.Context, request RequestVoteRequest) (RequestVoteResponse, error) {
 	if n == nil {
 		return RequestVoteResponse{}, ErrUnavailable
 	}
-	n.mu.Lock()
+	if err := n.mu.lockContext(ctx); err != nil {
+		return RequestVoteResponse{}, err
+	}
 	defer n.mu.Unlock()
 	if err := n.readyLocked(); err != nil {
 		return RequestVoteResponse{Term: n.term}, err
@@ -53,11 +55,13 @@ func (n *Node) HandleRequestVote(_ context.Context, request RequestVoteRequest) 
 
 // HandleAppendEntries implements log matching, conflict hints, commitment,
 // and ordered application for a leader's contiguous suffix.
-func (n *Node) HandleAppendEntries(_ context.Context, request AppendEntriesRequest) (AppendEntriesResponse, error) {
+func (n *Node) HandleAppendEntries(ctx context.Context, request AppendEntriesRequest) (AppendEntriesResponse, error) {
 	if n == nil {
 		return AppendEntriesResponse{}, ErrUnavailable
 	}
-	n.mu.Lock()
+	if err := n.mu.lockContext(ctx); err != nil {
+		return AppendEntriesResponse{}, err
+	}
 	defer n.mu.Unlock()
 	if err := n.readyLocked(); err != nil {
 		return AppendEntriesResponse{Term: n.term}, err
@@ -126,11 +130,13 @@ func (n *Node) HandleAppendEntries(_ context.Context, request AppendEntriesReque
 // HandleInstallSnapshot validates snapshot chunk integrity. Full snapshot
 // activation is deliberately delegated to the snapshot integration layer,
 // because the StableStore contract requires a committed matching log prefix.
-func (n *Node) HandleInstallSnapshot(_ context.Context, request InstallSnapshotRequest) (InstallSnapshotResponse, error) {
+func (n *Node) HandleInstallSnapshot(ctx context.Context, request InstallSnapshotRequest) (InstallSnapshotResponse, error) {
 	if n == nil {
 		return InstallSnapshotResponse{}, ErrUnavailable
 	}
-	n.mu.Lock()
+	if err := n.mu.lockContext(ctx); err != nil {
+		return InstallSnapshotResponse{}, err
+	}
 	defer n.mu.Unlock()
 	if err := n.readyLocked(); err != nil {
 		return InstallSnapshotResponse{Term: n.term}, err

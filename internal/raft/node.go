@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"viper/pkg/contracts"
 )
 
 const (
@@ -839,6 +841,14 @@ func (n *Node) entriesFromLocked(index Index, limit int) []Entry {
 	end := start + limit
 	if end > len(n.log) {
 		end = len(n.log)
+	}
+	wireBytes := 128
+	for i := start; i < end; i++ {
+		wireBytes += len(n.log[i].Command) + contracts.AppendEntryWireOverhead
+		if wireBytes > contracts.MaxRPCMessageBytes {
+			end = i
+			break
+		}
 	}
 	entries := make([]Entry, end-start)
 	for i := range entries {

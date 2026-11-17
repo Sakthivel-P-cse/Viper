@@ -251,6 +251,25 @@ func TestAppendDoesNotCommitUnmatchedSuffix(t *testing.T) {
 	}
 }
 
+func TestAppendRequestBoundsBytesAsWellAsEntries(t *testing.T) {
+	node, err := New(Config{ID: "node-1", Peers: []NodeID{"node-1", "node-2", "node-3"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.term = 1
+	for i := 1; i <= 5; i++ {
+		node.log = append(node.log, Entry{Index: Index(i), Term: 1, Command: make([]byte, 1024*1024)})
+	}
+	node.nextIndex["node-2"] = 1
+	request, err := node.appendRequestLocked("node-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(request.Entries) != 3 {
+		t.Fatalf("batch contains %d entries, want 3", len(request.Entries))
+	}
+}
+
 func TestPersistenceFailureMakesNodeUnavailableBeforeAcknowledgement(t *testing.T) {
 	failure := errors.New("disk full")
 	store := &testStore{fail: failure}

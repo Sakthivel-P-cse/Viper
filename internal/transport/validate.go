@@ -9,8 +9,6 @@ import (
 	"viper/pkg/contracts"
 )
 
-const appendEntryWireOverhead = 64
-
 var checksumTable = crc32.MakeTable(crc32.Castagnoli)
 
 func validateTarget(cluster *StaticCluster, localID, target raft.NodeID) error {
@@ -91,11 +89,11 @@ func validateAppendEntries(cluster *StaticCluster, request raft.AppendEntriesReq
 		if len(entry.Command) > contracts.MaxCommandBytes {
 			return invalidMessage("entries", "contains an oversized command")
 		}
-		if wireBytes+appendEntryWireOverhead > contracts.MaxRPCMessageBytes ||
-			len(entry.Command) > contracts.MaxRPCMessageBytes-wireBytes-appendEntryWireOverhead {
+		if wireBytes+contracts.AppendEntryWireOverhead > contracts.MaxRPCMessageBytes ||
+			len(entry.Command) > contracts.MaxRPCMessageBytes-wireBytes-contracts.AppendEntryWireOverhead {
 			return invalidMessage("entries", "exceeds the RPC message limit")
 		}
-		wireBytes += len(entry.Command) + appendEntryWireOverhead
+		wireBytes += len(entry.Command) + contracts.AppendEntryWireOverhead
 	}
 	return nil
 }

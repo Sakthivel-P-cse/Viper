@@ -24,6 +24,8 @@ const (
 	MaxStatusReasonBytes = 256
 	// MaxRPCMessageBytes is the transport-level inbound and outbound message cap.
 	MaxRPCMessageBytes = 4 * 1024 * 1024
+	// AppendEntryWireOverhead reserves space for each entry's wire metadata.
+	AppendEntryWireOverhead = 64
 )
 
 // ClientID identifies a logical client across requests and retries.

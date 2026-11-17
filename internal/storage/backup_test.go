@@ -62,3 +62,32 @@ func TestBackupRoundTripAndSafeRestore(t *testing.T) {
 		t.Fatalf("corrupt backup error = %v, want ErrInvalid", err)
 	}
 }
+
+func TestRestoreBackupWithLargeUnsnapshottedLog(t *testing.T) {
+	source := openTestStore(t, t.TempDir())
+	defer source.Close()
+	for i := 1; i <= 17; i++ {
+		hardState := raft.HardState{CurrentTerm: 1, CommitIndex: raft.Index(i)}
+		if err := source.Persist(raft.PersistBatch{HardState: &hardState, Entries: []raft.Entry{{Index: raft.Index(i), Term: 1, Command: make([]byte, 1024*1024)}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	backup, err := source.ExportBackup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	restored, err := RestoreBackup(directory, backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.Close(); err != nil {
+		t.Fatal(err)
+	}
+	restored = openTestStore(t, directory)
+	defer restored.Close()
+	state, err := restored.State()
+	if err != nil || len(state.Entries) != 17 || state.HardState.CommitIndex != 17 {
+		t.Fatalf("restored entries = %d, hard state = %#v, error = %v", len(state.Entries), state.HardState, err)
+	}
+}

@@ -116,12 +116,12 @@ func RestoreBackup(directory string, data []byte) (*Store, error) {
 		return nil, err
 	}
 	if state.Snapshot == nil {
-		if state.HardState != (raft.HardState{}) || len(state.Entries) != 0 {
-			if err := store.Persist(raft.PersistBatch{HardState: &state.HardState, Entries: state.Entries}); err != nil {
-				_ = store.Close()
-				return nil, err
-			}
+		next := recoveredState{entries: cloneEntries(state.Entries), hardState: state.HardState}
+		if err := store.rewriteWAL(next); err != nil {
+			_ = store.Close()
+			return nil, err
 		}
+		store.state = next
 		return store, nil
 	}
 	next := recoveredState{

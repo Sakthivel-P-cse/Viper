@@ -27,6 +27,9 @@ type Harness struct {
 	handlers   map[raft.NodeID]*faultHandler
 	order      []raft.NodeID
 	cursor     *Cursor
+	step       uint64
+	nextAction Action
+	hasNext    bool
 	closed     bool
 }
 
@@ -149,15 +152,28 @@ func (h *Harness) Apply(action Action) error {
 	return nil
 }
 
-// Step applies the next schedule action, then advances every live node once.
+// Step applies actions due at the next step, then ticks nodes. Step zero is due on the first call.
 func (h *Harness) Step() error {
 	if h == nil {
 		return ErrFaulted
 	}
-	if action, ok := h.cursor.Next(); ok {
-		if err := h.Apply(action); err != nil {
+	h.step++
+	for {
+		if !h.hasNext {
+			var ok bool
+			h.nextAction, ok = h.cursor.Next()
+			if !ok {
+				break
+			}
+			h.hasNext = true
+		}
+		if h.nextAction.Step > h.step {
+			break
+		}
+		if err := h.Apply(h.nextAction); err != nil {
 			return err
 		}
+		h.hasNext = false
 	}
 	return h.Tick()
 }

@@ -36,7 +36,7 @@ checker do not depend on infrastructure packages.
 
 ## Local verification
 
-Requirements: Go 1.26+, Buf 1.72+, and `rg`.
+Requirements: Go 1.26.11+, Buf 1.72+, and `rg`.
 
 ```bash
 make verify

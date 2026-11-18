@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"viper/internal/raft"
@@ -22,6 +24,22 @@ func validServeConfigForTest() serveConfig {
 		},
 		PeerTLS:   tlsFiles{Certificate: "/etc/viper/node.crt", Key: "/etc/viper/node.key", CA: "/etc/viper/ca.crt"},
 		ClientTLS: tlsFiles{Certificate: "/etc/viper/client.crt", Key: "/etc/viper/client.key", CA: "/etc/viper/client-ca.crt"},
+	}
+}
+
+func TestServeConfigDecodesGeneratedPeerShape(t *testing.T) {
+	decoder := json.NewDecoder(strings.NewReader(`{
+  "peers": [
+    {"id": "node-1", "address": "node-1:7301", "server_name": "node-1"}
+  ]
+}`))
+	decoder.DisallowUnknownFields()
+	var config serveConfig
+	if err := decoder.Decode(&config); err != nil {
+		t.Fatalf("generated peer configuration rejected: %v", err)
+	}
+	if len(config.Peers) != 1 || config.Peers[0].ServerName != "node-1" {
+		t.Fatalf("decoded peers = %#v, want node-1 server name", config.Peers)
 	}
 }
 

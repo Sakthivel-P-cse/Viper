@@ -14,9 +14,9 @@ const maxPeerAddressBytes = 2048
 
 // Peer is one immutable member of a statically configured cluster.
 type Peer struct {
-	ID         raft.NodeID
-	Address    string
-	ServerName string
+	ID         raft.NodeID `json:"id"`
+	Address    string      `json:"address"`
+	ServerName string      `json:"server_name,omitempty"`
 }
 
 // StaticCluster is a validated three- or five-node membership view. It does

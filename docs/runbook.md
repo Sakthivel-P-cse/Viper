@@ -44,6 +44,36 @@ go run ./cmd/viper probe -target 127.0.0.1:7401 -server-name node-1 \
   -key /secure/client-1.key
 ```
 
+## Local dashboard
+
+Start the three-node local profile using the [Compose guide](../deploy/compose/README.md).
+The certificate generation script requires OpenSSL and Python 3; its generated
+certificates are for local development only. Then run:
+
+```text
+go run ./cmd/viper dashboard -config .runtime/config/dashboard.json
+```
+
+Open `http://127.0.0.1:8080` on the same machine. The dashboard is read-only
+and only accepts a loopback listener. Stop it with Ctrl+C. Its JSON
+configuration contains:
+
+| Field | Purpose |
+| --- | --- |
+| `listen` | Loopback IP and port for the dashboard HTTP server. |
+| `tls` | Absolute `certificate`, `key`, and `ca` paths for its gRPC client. |
+| `nodes` | One to five fixed nodes with unique `id`, `target`, and TLS `server_name`. |
+
+Both status scopes require a certificate authorized as an administrator by each
+node. The dashboard keeps its certificate and key server-side. It shows each
+node's liveness and readiness independently; a readiness RPC may return
+unavailable rather than a status. When a liveness refresh fails, a retained
+observation is marked stale with its earlier timestamp. TLS handshake failures
+may also appear as unavailable, so check certificates and connections when
+troubleshooting. Individual observations do not prove quorum or cluster-wide
+availability. See the [dashboard contract](dashboard.md) for the security
+boundary.
+
 ## Backup and recovery
 
 Export and verify backups through the `internal/storage` API. The CLI verifies

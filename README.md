@@ -28,7 +28,7 @@ The local implementation and its tests are not proof of production readiness. Mu
 | Durable recovery | Checksummed WAL, synchronized persistence, snapshots, compaction, and fail-closed corruption handling. |
 | Secure boundaries | TLS identity and authorization for clients and peers, validation, and bounded request admission. |
 | Verification | An independent bounded linearizability checker and deterministic fault schedules. |
-| Operations | Authenticated probe, private metrics option, offline backup and restore, local Compose profile. |
+| Operations | Read-only local dashboard, authenticated probe, private metrics option, offline backup and restore, local Compose profile. |
 
 ---
 
@@ -108,7 +108,7 @@ On storage failure the open store becomes unhealthy; recovery validates records 
 
 - Go **1.26.11 or newer**, Git, and network access to download Go modules.
 - For the full verification gate: `make`, `rg`, and the pinned tools installed by `make tools`.
-- For the local process cluster: Docker with Compose, OpenSSL, and a POSIX shell.
+- For the local process cluster and generated dashboard configuration: Docker with Compose, OpenSSL, Python 3, and a POSIX shell.
 
 ### Install and run the in-memory demo
 
@@ -167,6 +167,7 @@ Run commands via `go run ./cmd/viper <command>` or use the `dist/viper` binary a
 | --- | --- |
 | `demo` | Run the in-memory election, write and read demonstration. |
 | `serve -config path` | Start a configured durable node. |
+| `dashboard -config path` | Start the read-only local node status dashboard. |
 | `probe -target host:port -server-name name -ca path -certificate path -key path` | Authenticated Put followed by a linearizable Get; writes a probe key. |
 | `check-history path` | Check a bounded JSON history for linearizability. |
 | `validate-schedule path` | Validate a deterministic chaos schedule. |
@@ -198,7 +199,7 @@ Viper exposes versioned **gRPC** services, not HTTP CRUD endpoints. Definitions 
 | `RaftPeerService.AppendEntries` | Peer log replication RPC. |
 | `RaftPeerService.InstallSnapshot` | Peer snapshot transfer RPC. |
 
-KV keys are limited to 4096 bytes and values to 1048576 bytes in the protobuf contract. Mutations require client and request IDs. Peer RPCs are for cluster members; status authorization depends on scope. Optional `/metrics` is a separate operational HTTP listener, not the data API.
+KV keys are limited to 4096 bytes and values to 1048576 bytes in the protobuf contract. Mutations require client and request IDs. Peer RPCs are for cluster members; status requests require administrator authorization. Optional `/metrics` is a separate operational HTTP listener, not the data API.
 
 ---
 
@@ -217,7 +218,15 @@ docker compose -f deploy/compose/docker-compose.yml up --build -d
 docker compose -f deploy/compose/docker-compose.yml ps
 ```
 
-Stop with `docker compose -f deploy/compose/docker-compose.yml down`. Generated `.runtime/` files include private keys; do not reuse the certificates outside local testing. See the [Compose guide](deploy/compose/README.md).
+In another terminal, start the dashboard using the generated configuration:
+
+```bash
+go run ./cmd/viper dashboard -config .runtime/config/dashboard.json
+```
+
+Open `http://127.0.0.1:8080`. The dashboard is read-only and loopback-only; it reports liveness and readiness separately. A failed refresh labels retained liveness observations as stale. TLS handshake failures may appear as unavailable, so check the certificate and connection when troubleshooting. Node observations do not prove quorum. Stop the dashboard with Ctrl+C.
+
+Stop the cluster with `docker compose -f deploy/compose/docker-compose.yml down`. Generated `.runtime/` files include private keys; do not reuse the certificates outside local testing. See the [Compose guide](deploy/compose/README.md).
 
 </details>
 

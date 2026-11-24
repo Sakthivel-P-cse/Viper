@@ -1,1 +1,29 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Viper dashboard</title></head><body><h1>Viper dashboard</h1><p>The dashboard interface is being prepared.</p></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Viper · Node status</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner"><a class="brand" href="/" aria-label="Viper dashboard"><span class="brand-mark" aria-hidden="true">V</span><span>Viper <span class="brand-sub">/ node status</span></span></a><span class="local-label"><span aria-hidden="true"></span> Local observer</span></div>
+  </header>
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <div><p class="overline">Cluster observations</p><h1 id="page-title">A clear view of your nodes.</h1><p class="intro-copy">Inspect the latest status reported by each configured node, all in one place.</p></div>
+      <div class="refresh"><button id="refresh" type="button"><span aria-hidden="true">↻</span> Refresh</button><p id="last-refresh" aria-live="polite">Waiting for first refresh</p></div>
+    </section>
+    <aside class="notice"><span class="notice-icon" aria-hidden="true">i</span><p>These are individual node observations. They do not prove cluster quorum or availability.</p></aside>
+    <section class="nodes-section" aria-labelledby="nodes-title">
+      <div class="section-heading"><div><h2 id="nodes-title">Nodes</h2><p>Role, health, and progress reported by each node.</p></div><span id="node-count" class="count"></span></div>
+      <p id="message" class="message" role="status" aria-live="polite">Loading node status…</p>
+      <div id="nodes" class="nodes"></div>
+    </section>
+  </main>
+  <footer><span>Viper</span><span>Read-only local dashboard</span></footer>
+</body>
+</html>

@@ -38,6 +38,8 @@ services:
       - ../../.runtime/data/node-2:/var/lib/viper/node-2
       - ../../.runtime/config/node-2.json:/etc/viper/config.json:ro
       - ../../.runtime/tls:/etc/viper/tls:ro
+    ports:
+      - "127.0.0.1:7402:7402"
     networks: [viper]
 
   node-3:
@@ -57,6 +59,8 @@ services:
       - ../../.runtime/data/node-3:/var/lib/viper/node-3
       - ../../.runtime/config/node-3.json:/etc/viper/config.json:ro
       - ../../.runtime/tls:/etc/viper/tls:ro
+    ports:
+      - "127.0.0.1:7403:7403"
     networks: [viper]
 
 networks:

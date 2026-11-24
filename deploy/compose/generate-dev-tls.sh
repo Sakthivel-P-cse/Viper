@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+command -v python3 >/dev/null
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 RUNTIME="$PROJECT_ROOT/.runtime"
 TLS="$RUNTIME/tls"
@@ -90,5 +91,26 @@ for node in node-1 node-2 node-3; do
 }
 EOF
 done
+
+python3 - "$CONFIG/dashboard.json" "$TLS" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config_path, tls = Path(sys.argv[1]), Path(sys.argv[2])
+config = {
+    "listen": "127.0.0.1:8080",
+    "tls": {
+        "certificate": str(tls / "admin-1.crt"),
+        "key": str(tls / "admin-1.key"),
+        "ca": str(tls / "client-ca.crt"),
+    },
+    "nodes": [
+        {"id": f"node-{i}", "target": f"127.0.0.1:740{i}", "server_name": f"node-{i}"}
+        for i in range(1, 4)
+    ],
+}
+config_path.write_text(json.dumps(config, indent=2) + "\n")
+PY
 
 printf '%s\n' "Generated local TLS and configs under $RUNTIME. Export VIPER_UID=$(id -u) and VIPER_GID=$(id -g) before docker compose up."

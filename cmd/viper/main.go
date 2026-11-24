@@ -66,6 +66,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "dashboard":
+		err = runDashboard(os.Args[2:])
 	case "demo":
 		err = runDemo()
 	case "serve":
@@ -95,7 +97,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: viper demo | serve -config path | check-history path | validate-schedule path | verify-backup path | export-backup -data-dir path -output path | restore-backup -data-dir path -backup path | probe -target host:port -ca path -certificate path -key path -server-name name | version")
+	fmt.Fprintln(os.Stderr, "usage: viper dashboard -config path | demo | serve -config path | check-history path | validate-schedule path | verify-backup path | export-backup -data-dir path -output path | restore-backup -data-dir path -backup path | probe -target host:port -ca path -certificate path -key path -server-name name | version")
 }
 
 var (

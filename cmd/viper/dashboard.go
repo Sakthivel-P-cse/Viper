@@ -45,14 +45,14 @@ type dashboardStatusClient interface {
 	GetNodeStatus(context.Context, *apiv1.GetNodeStatusRequest, ...grpc.CallOption) (*apiv1.GetNodeStatusResponse, error)
 }
 type dashboardObservation struct {
-	ID         string         `json:"id"`
-	ObservedAt time.Time      `json:"observed_at"`
-	Liveness   dashboardScope `json:"liveness"`
-	Readiness  dashboardScope `json:"readiness"`
+	ID        string         `json:"id"`
+	Liveness  dashboardScope `json:"liveness"`
+	Readiness dashboardScope `json:"readiness"`
 }
 type dashboardScope struct {
-	Error  string               `json:"error,omitempty"`
-	Status *dashboardNodeStatus `json:"status,omitempty"`
+	ObservedAt time.Time            `json:"observed_at"`
+	Error      string               `json:"error,omitempty"`
+	Status     *dashboardNodeStatus `json:"status,omitempty"`
 }
 type dashboardNodeStatus struct {
 	NodeID       string `json:"node_id"`
@@ -135,13 +135,14 @@ func dashboardQuery(ctx context.Context, client dashboardStatusClient, scope api
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	result, err := client.GetNodeStatus(ctx, &apiv1.GetNodeStatusRequest{Scope: scope})
+	observedAt := time.Now().UTC()
 	if err != nil {
-		return dashboardScope{Error: dashboardError(err)}
+		return dashboardScope{ObservedAt: observedAt, Error: dashboardError(err)}
 	}
 	if result == nil || result.GetNodeId() != expectedID {
-		return dashboardScope{Error: "error"}
+		return dashboardScope{ObservedAt: observedAt, Error: "error"}
 	}
-	return dashboardScope{Status: &dashboardNodeStatus{NodeID: result.GetNodeId(), Health: result.GetHealth().String(), Role: result.GetRole().String(), Term: strconv.FormatUint(result.GetTerm(), 10), CommitIndex: strconv.FormatUint(result.GetCommitIndex(), 10), AppliedIndex: strconv.FormatUint(result.GetAppliedIndex(), 10), Reason: result.GetReason()}}
+	return dashboardScope{ObservedAt: observedAt, Status: &dashboardNodeStatus{NodeID: result.GetNodeId(), Health: result.GetHealth().String(), Role: result.GetRole().String(), Term: strconv.FormatUint(result.GetTerm(), 10), CommitIndex: strconv.FormatUint(result.GetCommitIndex(), 10), AppliedIndex: strconv.FormatUint(result.GetAppliedIndex(), 10), Reason: result.GetReason()}}
 }
 
 func dashboardHandler(host string, nodes []dashboardNode, clients []dashboardStatusClient) http.Handler {
@@ -191,7 +192,7 @@ func dashboardHandler(host string, nodes []dashboardNode, clients []dashboardSta
 				wg.Add(1)
 				go func(i int) {
 					defer wg.Done()
-					observations[i] = dashboardObservation{ID: nodes[i].ID, Liveness: dashboardQuery(r.Context(), clients[i], apiv1.HealthScope_HEALTH_SCOPE_LIVENESS, nodes[i].ID), Readiness: dashboardQuery(r.Context(), clients[i], apiv1.HealthScope_HEALTH_SCOPE_READINESS, nodes[i].ID), ObservedAt: time.Now().UTC()}
+					observations[i] = dashboardObservation{ID: nodes[i].ID, Liveness: dashboardQuery(r.Context(), clients[i], apiv1.HealthScope_HEALTH_SCOPE_LIVENESS, nodes[i].ID), Readiness: dashboardQuery(r.Context(), clients[i], apiv1.HealthScope_HEALTH_SCOPE_READINESS, nodes[i].ID)}
 				}(i)
 			}
 			wg.Wait()

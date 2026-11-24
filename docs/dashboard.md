@@ -24,3 +24,8 @@ must be clearly marked stale after a failed refresh.
 The dashboard has no KV operations, membership changes, backup controls, or
 remote access. It does not change the protobuf API or Raft behavior. Remote
 use requires a separate browser authentication and deployment design.
+
+Each scope records its own completion time. gRPC can report TLS handshake
+failures as unavailable, so the dashboard cannot reliably distinguish those
+failures from an offline node; inspect local server and certificate setup when
+troubleshooting. The browser receives only the safe category.

@@ -39,7 +39,7 @@
   }
   function card(observation, fetchFailed) {
     const live = observation.liveness || {};
-    let snapshot = live.status ? { status: live.status, at: observation.observed_at } : previous.get(observation.id);
+    let snapshot = live.status ? { status: live.status, at: live.observed_at } : previous.get(observation.id);
     if (live.status && !fetchFailed) previous.set(observation.id, snapshot);
     const stale = Boolean(snapshot && (!live.status || fetchFailed));
     const status = snapshot && snapshot.status;

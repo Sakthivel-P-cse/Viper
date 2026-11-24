@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -85,7 +86,7 @@ func TestDashboardHandler(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Nodes) != 2 || result.Nodes[0].Liveness.Status.Term != "9007199254740993" || result.Nodes[0].Readiness.Error != "unavailable" || result.Nodes[1].Liveness.Error != "unauthorized" || result.Nodes[0].ObservedAt.IsZero() {
+	if len(result.Nodes) != 2 || result.Nodes[0].Liveness.Status.Term != "9007199254740993" || result.Nodes[0].Readiness.Error != "unavailable" || result.Nodes[1].Liveness.Error != "unauthorized" || result.Nodes[0].Liveness.ObservedAt.IsZero() || result.Nodes[0].Readiness.ObservedAt.IsZero() {
 		t.Fatalf("unexpected result: %+v", result.Nodes)
 	}
 }
@@ -104,5 +105,28 @@ func TestDashboardRejectsCrossSiteAndWrongNode(t *testing.T) {
 	result := dashboardQuery(context.Background(), fakeDashboardClient{}, apiv1.HealthScope_HEALTH_SCOPE_LIVENESS, "node-2")
 	if result.Error != "error" || result.Status != nil {
 		t.Fatalf("accepted mismatched node: %+v", result)
+	}
+}
+
+type delayedDashboardClient struct{}
+
+func (delayedDashboardClient) GetNodeStatus(_ context.Context, request *apiv1.GetNodeStatusRequest, _ ...grpc.CallOption) (*apiv1.GetNodeStatusResponse, error) {
+	if request.GetScope() == apiv1.HealthScope_HEALTH_SCOPE_READINESS {
+		time.Sleep(50 * time.Millisecond)
+	}
+	return &apiv1.GetNodeStatusResponse{NodeId: "node-1"}, nil
+}
+func TestDashboardSeparateObservationTimes(t *testing.T) {
+	handler := dashboardHandler("127.0.0.1:8080", []dashboardNode{{ID: "node-1"}}, []dashboardStatusClient{delayedDashboardClient{}})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest("GET", "http://127.0.0.1:8080/api/status", nil))
+	var result struct {
+		Nodes []dashboardObservation `json:"nodes"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Nodes) != 1 || result.Nodes[0].Readiness.ObservedAt.Sub(result.Nodes[0].Liveness.ObservedAt) < 50*time.Millisecond {
+		t.Fatalf("observation timestamps do not reflect delayed readiness: %+v", result.Nodes)
 	}
 }
